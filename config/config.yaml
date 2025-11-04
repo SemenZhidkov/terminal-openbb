@@ -1,0 +1,37 @@
+data_settings:
+  cache_dir: "data/processed"
+  raw_dir: "data/raw"
+  backup_dir: "data/backup"
+  file_format: "parquet"  # parquet или csv
+  
+  assets:
+    stocks:
+      - "AAPL"
+      - "MSFT" 
+      - "GOOGL"
+      - "TSLA"
+      - "NVDA"
+    etfs:
+      - "SPY"
+      - "QQQ"
+      - "IWM"
+      - "GLD"
+    indices:
+      - "^GSPC"  # S&P 500
+      - "^IXIC"  # NASDAQ
+      - "^DJI"   # Dow Jones
+
+  timeframes:
+    daily: "1d"
+    hourly: "1h"
+    weekly: "1w"
+
+  retry_settings:
+    max_retries: 3
+    backoff_factor: 1.5
+    retry_delay: 5
+
+  validation:
+    min_data_points: 100
+    max_null_percentage: 5.0
+    price_variance_threshold: 0.01

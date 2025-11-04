@@ -1,0 +1,25 @@
+# Virtual environment
+venv/
+.env
+
+# Data
+data/raw/
+data/processed/
+data/external/
+
+# Models
+models/
+
+# IDE
+.vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
