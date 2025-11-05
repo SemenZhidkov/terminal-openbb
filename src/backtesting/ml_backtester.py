@@ -171,6 +171,26 @@ class MLBacktester(Backtester):
         
         return results
     
+    def get_results(self) -> Dict:
+        """
+        Получить результаты ML бэктеста
+        
+        Returns:
+            dict: Результаты с метриками, предсказаниями и ML-метриками
+        """
+        # Получаем базовые результаты
+        results = super().get_results()
+        
+        # Добавляем ML-специфичные данные
+        if self.predictions:
+            results['predictions'] = pd.DataFrame(self.predictions).set_index('timestamp')
+            results['ml_metrics'] = self._calculate_ml_metrics()
+        else:
+            results['predictions'] = pd.DataFrame()
+            results['ml_metrics'] = {}
+        
+        return results
+    
     def _calculate_ml_metrics(self) -> Dict:
         """
         Расчет ML-специфичных метрик
@@ -193,8 +213,9 @@ class MLBacktester(Backtester):
         
         # Если есть сделки, добавляем корреляцию предсказаний с P&L
         trades_df = self.portfolio.get_trades_df()
-        if not trades_df.empty and 'predictions' in self.get_results():
-            pred_df = self.get_results()['predictions']
+        if not trades_df.empty and self.predictions:
+            # Создаем predictions DataFrame напрямую из self.predictions
+            pred_df = pd.DataFrame(self.predictions).set_index('timestamp')
             
             # Merge predictions with trades
             trades_with_pred = trades_df.merge(
@@ -204,16 +225,17 @@ class MLBacktester(Backtester):
                 how='left'
             )
             
-            if 'prediction' in trades_with_pred.columns:
+            if 'prediction' in trades_with_pred.columns and not trades_with_pred['prediction'].isna().all():
                 corr = trades_with_pred['prediction'].corr(trades_with_pred['pnl'])
-                metrics['prediction_pnl_correlation'] = corr
+                if not pd.isna(corr):
+                    metrics['prediction_pnl_correlation'] = corr
         
         return metrics
     
     def print_ml_summary(self):
         """Вывести сводку по ML-метрикам"""
-        results = self.get_results()
-        ml_metrics = results.get('ml_metrics', {})
+        # Пересчитываем метрики на основе текущих predictions
+        ml_metrics = self._calculate_ml_metrics()
         
         print("\n" + "=" * 70)
         print("  ML MODEL METRICS")
@@ -221,8 +243,8 @@ class MLBacktester(Backtester):
         
         print(f"\n🤖 MODEL INFO:")
         print(f"  Model Type:            {type(self.model).__name__}")
-        print(f"  Feature Count:         {ml_metrics.get('feature_count', 0)}")
-        print(f"  Prediction Threshold:  {ml_metrics.get('prediction_threshold', 0):.3f}")
+        print(f"  Feature Count:         {ml_metrics.get('feature_count', len(self.feature_columns))}")
+        print(f"  Prediction Threshold:  {ml_metrics.get('prediction_threshold', self.prediction_threshold):.3f}")
         
         print(f"\n📊 PREDICTION STATISTICS:")
         print(f"  Total Predictions:     {ml_metrics.get('total_predictions', 0)}")
