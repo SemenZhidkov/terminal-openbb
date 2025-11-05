@@ -337,3 +337,104 @@ meta = engine.get_feature_metadata('rsi_14')
 ```
 
 Подробный пример с визуализацией: `notebooks/exploratory/02_feature_engineering_demo.ipynb`
+
+---
+
+## Backtesting Engine
+
+### Профессиональный движок бэктестинга стратегий
+
+**Ключевые компоненты:**
+
+**Portfolio Management:**
+- Управление капиталом и позициями
+- Учет комиссий и slippage
+- Margin requirements
+- Реализованный и нереализованный P&L
+- История equity и drawdown
+
+**Execution Engine:**
+- Market, Limit, Stop, Stop-Limit orders
+- Автоматическая проверка капитала
+- Realistic order filling
+- Slippage modeling
+
+**Performance Metrics:**
+- Risk-adjusted: Sharpe Ratio, Sortino Ratio, Calmar Ratio
+- Drawdown metrics: Max DD, DD Duration, Recovery Factor, Ulcer Index
+- Trade statistics: Win Rate, Profit Factor, Avg Trade, Consecutive wins/losses
+- Annual returns, Monthly returns heatmap
+
+**Advanced Features:**
+- ML Backtester: автоматический predict на каждом баре
+- Walk-Forward Analysis: проверка устойчивости на rolling windows
+- Multi-timeframe support
+- Подробное логирование и визуализация
+
+### Использование Backtester:
+
+```python
+from src.backtesting import Backtester, MLBacktester, WalkForwardAnalyzer
+
+# Простая стратегия
+def sma_crossover_strategy(bar, portfolio, context):
+    if bar['sma_50'] > bar['sma_200'] and not portfolio.has_position('AAPL'):
+        return 1  # BUY
+    elif bar['sma_50'] < bar['sma_200'] and portfolio.has_position('AAPL'):
+        return -1  # SELL
+    return 0  # HOLD
+
+# Запуск бэктеста
+backtester = Backtester(
+    data=df_with_features,
+    strategy=sma_crossover_strategy,
+    initial_capital=100000,
+    commission_rate=0.001,
+    slippage_rate=0.0005,
+    position_size=0.95
+)
+
+results = backtester.run()
+backtester.print_summary()
+backtester.plot_results()
+
+# ML Backtesting
+from sklearn.ensemble import RandomForestClassifier
+
+model = RandomForestClassifier(n_estimators=100, max_depth=10)
+model.fit(X_train, y_train)
+
+ml_bt = MLBacktester(
+    data=test_data,
+    model=model,
+    feature_columns=['rsi_14', 'macd', 'atr_14', 'adx'],
+    prediction_threshold=0.55
+)
+
+ml_results = ml_bt.run()
+ml_bt.print_ml_summary()
+
+# Walk-Forward Analysis
+wf_analyzer = WalkForwardAnalyzer(
+    data=df,
+    train_period=252,  # 1 год
+    test_period=63,    # 3 месяца
+    step_size=63
+)
+
+wf_results = wf_analyzer.run_ml(
+    model_class=RandomForestClassifier,
+    feature_columns=feature_cols,
+    target_column='target'
+)
+
+wf_analyzer.print_summary()
+wf_analyzer.plot_results()
+```
+
+**Примеры:**
+- Простой backtest: `notebooks/exploratory/03_backtesting_demo.ipynb`
+- Подробная документация: `docs/BACKTESTING_GUIDE.md`
+
+---
+
