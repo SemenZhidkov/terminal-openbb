@@ -29,6 +29,19 @@ class DataManager:
         """Загрузка конфигурации"""
         try:
             import yaml
+            # Преобразуем в абсолютный путь, если путь относительный
+            if not os.path.isabs(config_path):
+                # Если запускаем из ноутбука, ищем конфиг относительно корня проекта
+                abs_path = os.path.abspath(config_path)
+                if not os.path.exists(abs_path):
+                    logger.error(f"Конфиг не найден: {abs_path}")
+                    logger.error(f"Текущая директория: {os.getcwd()}")
+                    raise FileNotFoundError(
+                        f"Конфигурация не найдена: {config_path}\n"
+                        f"Попробуйте передать абсолютный путь к config.yaml в DataManager(config_path=...)"
+                    )
+                config_path = abs_path
+                
             with open(config_path, 'r') as file:
                 return yaml.safe_load(file)
         except Exception as e:

@@ -17,15 +17,31 @@
 
 ## Архитектура и ключевые модули
 
+### Модуль загрузки данных
 - `src/data/data_manager.py` — ядро пайплайна: конфиг, ретраи, загрузка, кеш, нормализация, пакетные задачи, метрики кеша
 - `src/data/data_validator.py` — проверка качества таймсерий (обязательные колонки, пропуски, high/low/open/close, объём, даты, дисперсия)
 - `src/data/data_loader.py` — простой пример загрузчика через OpenBB и сохранения в `data/raw`
 - `scripts/update_data.py` — ежедневный апдейтер: пакетная загрузка, валидация, отчёт в `data/backup`, логирование в `logs/data_update.log`
 - `config/config.yaml` — активы, таймфреймы, параметры кеша/валидации/ретраев, формат файлов
 
-Диаграмма потока (вкратце):
+### Модуль расчёта фич (Feature Engineering)
+- `src/features/feature_engine.py` — ядро системы фич: регистрация, версионирование, кеширование, пакетный расчёт
+- `src/features/technical_indicators.py` — 20+ технических индикаторов (RSI, MACD, Bollinger Bands, ADX, Stochastic, etc.)
+- `src/features/price_features.py` — price-based фичи: доходности, волатильность (realized/Parkinson/Garman-Klass), momentum, Z-score, drawdown
+- `src/features/rolling_features.py` — rolling window фичи: SMA/EMA кроссоверы, автокорреляция, trend strength, Hurst exponent
+- `src/features/macro_features.py` — заглушки для макро-индикаторов (VIX, rates, spreads, commodities)
+- `src/features/feature_registry.py` — автоматическая регистрация всех 50+ фич
 
-1) Конфиг → 2) Загрузка (OpenBB → yfinance) → 3) Нормализация → 4) Кеширование → 5) Валидация → 6) Отчёт и логи
+**Возможности Feature Engine:**
+- 50+ готовых фич (технические индикаторы, price patterns, rolling stats)
+- Версионирование фич (hash функции + параметров)
+- Автоматическое кеширование результатов
+- Пакетный расчёт по группам (technical/price_based/rolling)
+- Метаданные и audit log
+
+Диаграмма потока:
+
+1) Конфиг → 2) Загрузка (OpenBB → yfinance) → 3) Нормализация → 4) Кеширование → 5) Валидация → **6) Feature Engineering** → 7) ML-Ready Dataset
 
 ---
 
@@ -51,9 +67,18 @@
 │   │   ├── data_manager.py
 │   │   └── data_validator.py
 │   ├── features/
+│   │   ├── feature_engine.py       # ядро Feature Engine
+│   │   ├── technical_indicators.py # 20+ технических индикаторов
+│   │   ├── price_features.py       # price-based фичи
+│   │   ├── rolling_features.py     # rolling window фичи
+│   │   ├── macro_features.py       # макро-индикаторы (заглушки)
+│   │   └── feature_registry.py     # регистратор всех фич
 │   ├── models/
 │   └── visualization/
 ├── tests/
+│   ├── test_technical_indicators.py
+│   ├── test_price_features.py
+│   └── test_feature_pipeline.py
 ├── requirements.txt
 ├── setup.py
 ├── test_data_pipeline.py    # интеграционный скрипт-тест (использует сеть)
@@ -122,6 +147,28 @@ ALPHA_VANTAGE_API_KEY=...
 python -c "from src.data.data_manager import DataManager; dm=DataManager(); df=dm.get_stock_data('AAPL','1d','6mo'); print(df.tail())"
 ```
 
+### Расчёт фич для инструмента
+```zsh
+python -c "
+from src.data.data_manager import DataManager
+from src.features.feature_engine import FeatureEngine
+from src.features.feature_registry import register_all_features
+
+# Загрузка данных
+dm = DataManager()
+df = dm.get_stock_data('AAPL', '1d', '5y')
+
+# Инициализация Feature Engine
+engine = FeatureEngine()
+register_all_features(engine)
+
+# Расчёт всех 50+ фич
+df_with_features = engine.compute_all(df)
+print(f'Добавлено {len(df_with_features.columns) - len(df.columns)} фич')
+print(df_with_features.tail())
+"
+```
+
 ### Пакетная загрузка по спискам из конфига
 ```zsh
 python scripts/update_data.py
@@ -130,6 +177,11 @@ python scripts/update_data.py
 - Кешированные файлы: `data/processed/*.parquet|csv`
 - Отчёт: `data/backup/update_report_YYYYMMDD_HHMMSS.json`
 - Логи: `logs/data_update.log`
+
+### Демо-ноутбук с визуализацией фич
+```zsh
+jupyter lab notebooks/exploratory/02_feature_engineering_demo.ipynb
+```
 
 ### Пример информации о кешe
 ```zsh
@@ -157,7 +209,18 @@ python -c "from src.data.data_manager import DataManager; dm=DataManager(); prin
 - `test_openbb.py` — базовая проверка OpenBB
 - `test_data_pipeline.py` — прогон пайплайна (загрузка → кеш → валидация)
 
-Для быстрых “smoke”-проверок импорта без сети можно запустить:
+Для запуска unit-тестов Feature Engine:
+```zsh
+pip install pytest
+pytest tests/ -v
+```
+
+Unit-тесты покрывают:
+- **Технические индикаторы** (`tests/test_technical_indicators.py`): корректность диапазонов, структура выходных данных, edge cases
+- **Price-based фичи** (`tests/test_price_features.py`): returns, volatility, momentum, drawdown
+- **Feature Pipeline** (`tests/test_feature_pipeline.py`): регистрация, расчёт, кеширование, версионирование
+
+Для быстрых "smoke"-проверок импорта без сети:
 ```zsh
 python -m pytest -q tests/test_imports.py
 ```
@@ -200,8 +263,77 @@ python -m pytest -q tests/test_imports.py
 
 ## Roadmap (идеи на будущее)
 
-- Unit-тесты без сети с моками источников
+- ~~Unit-тесты без сети с моками источников~~ ✅ Реализовано
+- ~~Система расчёта и версионирования фич~~ ✅ 50+ фич готово
 - Линтинг/форматирование (ruff/black), типизация (mypy)
 - Консольные entry points для апдейтера
+- Реализация макро-фичей через FRED/OpenBB API
+- Feature selection и dimensionality reduction
 - Расширенные отчёты по качеству данных и визуализация
 - Интеграция с CI (GitHub Actions)
+- ML pipeline: обучение и бэктестинг моделей
+
+---
+
+## Feature Engineering Capabilities
+
+### 50+ готовых фич включают:
+
+**Технические индикаторы (20+):**
+- Momentum: RSI, MACD, Stochastic, CCI, Williams %R, MFI, ROC
+- Volatility: ATR, Bollinger Bands, Keltner Channel, Donchian Channel
+- Trend: ADX, Aroon, EMA, SMA, VWAP
+- Volume: OBV, A/D Line, CMF
+- Advanced: Parabolic SAR, Ichimoku Cloud
+
+**Price-Based Features (20+):**
+- Returns: simple, log, forward, cumulative
+- Volatility: realized, Parkinson, Garman-Klass, Yang-Zhang
+- Volatility regimes (Low/Normal/High)
+- Momentum: multi-period, acceleration, Z-score
+- Distance from high/low
+- Candle patterns: body size, shadows, gaps
+- Statistical: rolling Sharpe/Sortino, skewness, kurtosis, drawdown
+
+**Rolling Window Features (10+):**
+- Multiple timeframe SMAs/EMAs
+- EMA crossovers (Golden/Death Cross)
+- Price vs MA deviations
+- Autocorrelation (mean reversion detection)
+- Trend strength (R²), linear regression slope/angle
+- Volatility ratios
+- Hurst exponent (trending vs mean-reverting)
+
+**Макро-индикаторы (заглушки):**
+- VIX, Treasury yields, yield curve slope
+- DXY (Dollar Index), commodity prices
+- Sentiment indicators
+
+### Использование Feature Engine:
+
+```python
+from src.features.feature_engine import FeatureEngine
+from src.features.feature_registry import register_all_features
+
+# Инициализация
+engine = FeatureEngine(cache_dir='data/processed/features')
+register_all_features(engine)
+
+# Получение статистики
+summary = engine.get_summary()
+print(f"Зарегистрировано фич: {summary['total_features']}")
+
+# Расчёт всех фич
+df_with_features = engine.compute_all(df_ohlcv)
+
+# Расчёт только технических индикаторов
+df_technical = engine.compute_all(df_ohlcv, groups=['technical'])
+
+# Расчёт одной фичи
+df_with_rsi = engine.compute_feature('rsi_14', df_ohlcv)
+
+# Метаданные фичи
+meta = engine.get_feature_metadata('rsi_14')
+```
+
+Подробный пример с визуализацией: `notebooks/exploratory/02_feature_engineering_demo.ipynb`
