@@ -7,6 +7,7 @@ import sys
 import os
 import logging
 from datetime import datetime
+from pathlib import Path
 import pandas as pd
 
 # Добавляем путь к src для импорта модулей
@@ -16,6 +17,8 @@ from src.data.data_manager import DataManager
 from src.data.data_validator import DataValidator
 
 # Настройка логирования
+# Гарантируем существование директории для логов, чтобы FileHandler не упал
+os.makedirs('logs', exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
